@@ -6,6 +6,7 @@ Created on Mon Apr 17 14:00:59 2017
 """
 
 import pandas as pd
+import numpy as np
 
 def eda(dataframe): #Performs exploratory data analysis on the dataframe
     print "columns \n", dataframe.columns
@@ -21,6 +22,15 @@ def eda(dataframe): #Performs exploratory data analysis on the dataframe
     print "%s duplicates out of %s records" % (len(dataframe) - len(dataframe.drop_duplicates()), len(dataframe))
 
 def clean_and_transform(train, spray, weather):
+    #Replacing M which is missing data and T which is Trace Data with NAN
+    weather_df.replace("M", np.nan, inplace = True)
+    weather_df.replace("T", np.nan, inplace = True)
+    
+    #Casting all appropriate weather columns as ints
+    numeric_columns = ['Station', 'Tmax', 'Tmin', 'Tavg', 'Depart', 'DewPoint', 'WetBulb', 'Heat', 'Cool', 'Sunrise', 'Sunset', 'Depth', 'Water1', 'SnowFall', 'PrecipTotal', 'StnPressure', 'SeaLevel', 'ResultSpeed', 'ResultDir', 'AvgSpeed']
+    for column in numeric_columns:
+        weather_df[column] = weather_df[column].apply(pd.to_numeric, errors='coerce')
+    
     #Imputing 7:44:32 PM because that time has the most frequency and they all occur on 2011-09-07. Same date as when the null values are.
     spray.Time.fillna("7:44:32 PM", inplace = True)
     
@@ -41,12 +51,13 @@ def clean_and_transform(train, spray, weather):
             target_remap_dict[row["Date-Trap"]] = {"WnvPresentAdj": row["WnvPresent"], "WnvMosquito": wnv_mosquitos}
     target_remap_df = pd.DataFrame.from_dict(target_remap_dict, orient = "index")
     
-    #Combining DFs
+    #Combining DFs. Using O'Hare Data because Midway does not track certain features
+    #Depth and SnowFall likely are bad values because Midway lists them all as M and O'Hare lists them all as 0 (I doubt Chicago had 0 snowfall)
     master_df = train.drop_duplicates(subset = ["Date", "Trap"])
     del master_df['WnvPresent']
     del master_df['Species']
     master_df = pd.merge(master_df, target_remap_df, left_on = "Date-Trap", right_index = True)
-    master_df = pd.merge(master_df, weather[weather.Station == 2], left_on = "Date", right_on = "Date", how = "left")
+    master_df = pd.merge(master_df, weather[weather.Station == 1], left_on = "Date", right_on = "Date", how = "left")
     del master_df["Date-Trap"]
     
     return master_df
