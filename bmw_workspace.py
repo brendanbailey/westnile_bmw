@@ -7,6 +7,7 @@ Created on Mon Apr 17 14:00:59 2017
 
 import pandas as pd
 import numpy as np
+from geopy.distance import vincenty
 
 def eda(dataframe): #Performs exploratory data analysis on the dataframe
     print "columns \n", dataframe.columns
@@ -34,21 +35,44 @@ def clean_and_transform(train, spray, weather):
     #Imputing 7:44:32 PM because that time has the most frequency and they all occur on 2011-09-07. Same date as when the null values are.
     spray.Time.fillna("7:44:32 PM", inplace = True)
     
-    #Rolling up Data so only one record for date and trap available
+    #Originally I tried using dataframe.iterows to add in spray data. That was taking so long. Using a dictionary because that can be more efficient.
+    spray_dictionary = {}
+    for index, row in spray[["Date", "Latitude", "Longitude"]].iterrows():
+        try:
+            spray_dictionary[row["Date"]].append({"Latitude":row["Latitude"], "Longitude":row["Longitude"]})
+        except KeyError:
+            spray_dictionary[row["Date"]] = [{"Latitude":row["Latitude"], "Longitude":row["Longitude"]}]
+    
+    #Rolling up Data so only one record for date and trap available, and also adding spray location based on Date and Location
     train["Date-Trap"] = train["Date"] + "-" + train["Trap"]
     target_remap_dict = {}
-    for index, row in train[["Date-Trap", "WnvPresent", "Species"]].iterrows():
+    for index, row in train[["Date-Trap", "WnvPresent", "Species", "Date", "Latitude", "Longitude"]].iterrows():
+        #Checking for WNV Mosquito Species
         if row["Species"] in ["CULEX PIPIENS/RESTUANS", "CULEX RESTUANS", "CULEX PIPIENS"]:
             wnv_mosquitos = 1
         else:
             wnv_mosquitos = 0
+        #Checking if in half mile spray vicinity
+        sprayed = 0
+        vicenty1 = (row["Latitude"],row["Longitude"])
+        try:
+            for geocode in spray_dictionary[row["Date"]]:
+                vicenty2 = (geocode["Latitude"], geocode["Longitude"])
+                if vincenty(vicenty1,vicenty2).miles <= 1:
+                    sprayed = 1
+                    break
+        except KeyError:
+            pass
+        #Updating Dictionary
         try:
             if target_remap_dict[row["Date-Trap"]]["WnvPresentAdj"] == 0:
                 target_remap_dict[row["Date-Trap"]]["WnvPresentAdj"] = row["WnvPresent"]
             if target_remap_dict[row["Date-Trap"]]["WnvMosquito"] == 0:
                 target_remap_dict[row["Date-Trap"]]["WnvMosquito"] = wnv_mosquitos
         except KeyError: 
-            target_remap_dict[row["Date-Trap"]] = {"WnvPresentAdj": row["WnvPresent"], "WnvMosquito": wnv_mosquitos}
+            target_remap_dict[row["Date-Trap"]] = {"WnvPresentAdj": row["WnvPresent"], "WnvMosquito": wnv_mosquitos, "Sprayed": sprayed}
+        if (index + 1) % 1000 == 0:
+            print index + 1
     target_remap_df = pd.DataFrame.from_dict(target_remap_dict, orient = "index")
     
     #Combining DFs. Using O'Hare Data because Midway does not track certain features
@@ -60,9 +84,11 @@ def clean_and_transform(train, spray, weather):
     master_df = pd.merge(master_df, weather[weather.Station == 1], left_on = "Date", right_on = "Date", how = "left")
     del master_df["Date-Trap"]
     
-    return master_df
+    #Converting Date from string to date. The df only has data for odd years which is weird!
+    master_df["Date"] = pd.to_datetime(master_df.Date)
+    return master_df, spray_dictionary
 
 train_df = pd.read_csv("assets/train.csv")
 weather_df = pd.read_csv("assets/weather.csv")
 spray_df = pd.read_csv("assets/spray.csv")
-master_df = clean_and_transform(train_df, spray_df, weather_df)
+master_df, spray_dictionary = clean_and_transform(train_df, spray_df, weather_df)
