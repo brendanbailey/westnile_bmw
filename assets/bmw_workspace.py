@@ -126,7 +126,30 @@ print grid.score(X_test, y_test)
 #Best Params {'max_depth': 5, 'max_features': 0.5}
 
 
+y = master_df.WnvPresentAdj
+X = master_df[["Block", "Tmax", "Tmin", "Tavg", "Depart", "DewPoint", "WetBulb", "Heat", "Cool", "Sunrise", "Sunset", "StnPressure", "SeaLevel", "ResultSpeed", "ResultDir", "AvgSpeed"]]
+X_train, X_test, y_train, y_test = train_test_split(X, y, stratify = y, test_size=0.3, random_state = 34198)
+max_depth = [6,7,8,9,10]
+max_features = [0.25, 0.5, 0.75]
+forest = RandomForestClassifier(random_state = 98574, n_estimators = 50)
+grid = GridSearchCV(forest, param_grid = {'max_depth': max_depth, 'max_features': max_features}, cv = 10, verbose = True, n_jobs = -1)
+grid.fit(X_train, y_train)
+print grid.score(X_train, y_train)
+print grid.score(X_test, y_test)
+#Best Score 0.918601052306
+#Best Params {'max_depth': 6, 'max_features': 0.25}
+
 forest = RandomForestClassifier(random_state = 98574, n_estimators = 50, max_depth = 5, max_features = 0.5)
+forest.fit(X_train, y_train)
+print forest.score(X_train, y_train)
+print forest.score(X_test, y_test)
+predictions = forest.predict(X_test)
+a_score, confusion, c_report = evaluate_model(y_test, predictions) #Confusion Matrix Printing Out Wrong
+print a_score
+print confusion
+print c_report
+
+forest = RandomForestClassifier(random_state = 98574, n_estimators = 50, max_depth = 6, max_features = 0.25)
 forest.fit(X_train, y_train)
 print forest.score(X_train, y_train)
 print forest.score(X_test, y_test)
